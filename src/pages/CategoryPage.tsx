@@ -4,8 +4,7 @@ import { motion } from 'framer-motion';
 import Header from '../components/Header';
 import Footer from '../components/Footer';
 import MenuSection from '../components/MenuSection';
-import { fetchMenuData, MenuItem } from '../lib/googleSheets';
-import { categoryInfo } from './HomePage';
+import { fetchMenuData, MenuItem, getCategoriesFromMenu, createCategorySlug } from '../lib/googleSheets';
 
 export default function CategoryPage() {
   const { slug } = useParams<{ slug: string }>();
@@ -14,27 +13,69 @@ export default function CategoryPage() {
   
   const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
   const [loading, setLoading] = useState(true);
-
-  const category = slug ? Object.values(categoryInfo).find(c => c.slug === slug) : undefined;
+  const [category, setCategory] = useState<{ title: string; description: string; slug: string } | undefined>(undefined);
 
   useEffect(() => {
     async function loadMenu() {
       try {
         const data = await fetchMenuData();
-        setMenuItems(data.filter(item => item.category === category?.title));
+        
+        if (!data || data.length === 0) {
+          console.error('Menü verisi boş');
+          setLoading(false);
+          return;
+        }
+        
+        const categoryNames = getCategoriesFromMenu(data);
+        console.log('Bulunan kategoriler:', categoryNames);
+        console.log('Aranan slug:', slug);
+        
+        // Slug'a göre kategori bul
+        const foundCategory = categoryNames.find(cat => {
+          const catSlug = createCategorySlug(cat);
+          console.log(`Kategori: ${cat}, Slug: ${catSlug}, Eşleşme: ${catSlug === slug}`);
+          return catSlug === slug;
+        });
+        
+        if (foundCategory) {
+          setCategory({
+            title: foundCategory,
+            description: getCategoryDescription(foundCategory),
+            slug: createCategorySlug(foundCategory),
+          });
+          setMenuItems(data.filter(item => item.category === foundCategory));
+        } else {
+          console.warn('Kategori bulunamadı. Mevcut kategoriler:', categoryNames);
+        }
       } catch (error) {
         console.error('Menü yüklenirken hata:', error);
+        // Hata durumunda da loading'i false yap
       } finally {
         setLoading(false);
       }
     }
-    if (category) {
+    if (slug) {
       loadMenu();
     }
-  }, [category]);
+  }, [slug]);
+
+  const getCategoryDescription = (categoryName: string): string => {
+    const descriptions: Record<string, string> = {
+      'Çeşitler': 'Çeşitli seçenekler',
+      'Menüler': 'Özel menü seçenekleri',
+      'Tatlılar': 'Geleneksel ve özel tatlılar',
+      'Sıcak Mezeler': 'Sıcak mezeler ve atıştırmalıklar',
+      'Ana Yemekler': 'Közden gelen lezzetler',
+      'Soğuk Mezeler': 'Soğuk mezeler ve lezzetler',
+      'Salatalar': 'Taze ve sağlıklı salatalar',
+      'İçecekler': 'Sıcak, soğuk ve alkollü içecekler',
+      'Meyveler': 'Taze mevsim meyveleri',
+    };
+    return descriptions[categoryName] || 'Lezzetli seçenekler';
+  };
 
   useEffect(() => {
-    if (highlight && !loading) {
+    if (highlight && !loading && category) {
       setTimeout(() => {
         const itemId = `item-${highlight.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '')}`;
         const element = document.getElementById(itemId);
@@ -47,21 +88,9 @@ export default function CategoryPage() {
         }
       }, 500);
     }
-  }, [highlight, loading]);
+  }, [highlight, loading, category]);
 
-  if (!category) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-cream">
-        <div className="text-center">
-          <h1 className="text-4xl font-serif text-navy mb-4">Kategori Bulunamadı</h1>
-          <Link to="/" className="text-sky hover:text-sky/80 underline font-sans">
-            Ana sayfaya dön
-          </Link>
-        </div>
-      </div>
-    );
-  }
-
+  // Loading state'i önce kontrol et
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-cream">
@@ -72,6 +101,21 @@ export default function CategoryPage() {
             transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
           />
           <p className="text-sky font-serif text-xl">Yükleniyor...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Loading bittikten sonra kategori kontrolü yap
+  if (!category) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-cream">
+        <div className="text-center">
+          <h1 className="text-4xl font-serif text-navy mb-4">Kategori Bulunamadı</h1>
+          <p className="text-navy/60 mb-4 font-sans">Aradığınız kategori bulunamadı veya henüz yüklenmedi.</p>
+          <Link to="/" className="text-sky hover:text-sky/80 underline font-sans">
+            Ana sayfaya dön
+          </Link>
         </div>
       </div>
     );
@@ -137,16 +181,14 @@ export default function CategoryPage() {
 
 function getCategoryIconName(slug: string): string {
   const icons: Record<string, string> = {
-    'baslangiclar': 'soup',
-    'mezeler': 'dish',
-    'ara-sicaklar': 'flame',
-    'salatalar': 'salad',
-    'ana-yemekler': 'meat',
-    'spesyaller': 'star',
+    'cesitler': 'nuts',
+    'menuler': 'star',
     'tatlilar': 'cake',
+    'sicak-mezeler': 'flame',
+    'ana-yemekler': 'meat',
+    'soguk-mezeler': 'dish',
+    'salatalar': 'salad',
     'icecekler': 'coffee',
-    'alkoller': 'wine',
-    'aperatifler': 'nuts',
     'meyveler': 'fruits',
   };
   return icons[slug] || 'dish';

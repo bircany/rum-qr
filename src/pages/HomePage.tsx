@@ -4,31 +4,33 @@ import Header from '../components/Header';
 import Footer from '../components/Footer';
 import SearchBar from '../components/SearchBar';
 import CategoryCard from '../components/CategoryCard';
-import { fetchMenuData, MenuItem } from '../lib/googleSheets';
+import { fetchMenuData, MenuItem, getCategoriesFromMenu, createCategorySlug } from '../lib/googleSheets';
 
-export const categoryInfo: Record<string, { title: string; description: string; slug: string }> = {
-  'baslangiclar': { title: 'Başlangıçlar', description: 'Sıcak çorbalar ile başlayın', slug: 'baslangiclar' },
-  'mezeler': { title: 'Mezeler', description: 'Soğuk mezeler ve lezzetler', slug: 'mezeler' },
-  'ara-sicaklar': { title: 'Ara Sıcaklar', description: 'Sıcak atıştırmalıklar', slug: 'ara-sicaklar' },
-  'salatalar': { title: 'Salatalar', description: 'Taze ve sağlıklı', slug: 'salatalar' },
-  'ana-yemekler': { title: 'Ana Yemekler', description: 'Közden gelen lezzetler', slug: 'ana-yemekler' },
-  'spesyaller': { title: 'Spesyaller', description: 'Özel tariflerimiz', slug: 'spesyaller' },
-  'tatlilar': { title: 'Tatlılar', description: 'Geleneksel tatlılar', slug: 'tatlilar' },
-  'icecekler': { title: 'İçecekler', description: 'Sıcak ve soğuk içecekler', slug: 'icecekler' },
-  'alkoller': { title: 'Alkoller', description: 'Rakı, şarap, bira ve daha fazlası', slug: 'alkoller' },
-  'aperatifler': { title: 'Aperatifler', description: 'Kuruyemiş çeşitleri', slug: 'aperatifler' },
-  'meyveler': { title: 'Meyveler', description: 'Taze mevsim meyveleri', slug: 'meyveler' },
+// Özel kategoriler için bilgiler (Kuver ve Fix Menü)
+const specialCategories: Record<string, { title: string; description: string; slug: string }> = {
+  'kuver': { title: 'Kuver', description: 'Kişi başı kuver ücreti', slug: 'kuver' },
+  'fix-menu': { title: 'Fix Menü', description: 'Özel menü seçenekleri', slug: 'fix-menu' },
 };
 
 export default function HomePage() {
   const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [categories, setCategories] = useState<Array<{ title: string; description: string; slug: string }>>([]);
 
   useEffect(() => {
     async function loadMenu() {
       try {
         const data = await fetchMenuData();
         setMenuItems(data);
+        
+        // Kategorileri dinamik olarak oluştur
+        const categoryNames = getCategoriesFromMenu(data);
+        const categoryList = categoryNames.map(cat => ({
+          title: cat,
+          description: getCategoryDescription(cat),
+          slug: createCategorySlug(cat),
+        }));
+        setCategories(categoryList);
       } catch (error) {
         console.error('Menü yüklenirken hata:', error);
       } finally {
@@ -40,6 +42,21 @@ export default function HomePage() {
 
   const getItemsByCategory = (categoryTitle: string) => {
     return menuItems.filter(item => item.category === categoryTitle);
+  };
+
+  const getCategoryDescription = (categoryName: string): string => {
+    const descriptions: Record<string, string> = {
+      'Çeşitler': 'Çeşitli seçenekler',
+      'Menüler': 'Özel menü seçenekleri',
+      'Tatlılar': 'Geleneksel ve özel tatlılar',
+      'Sıcak Mezeler': 'Sıcak mezeler ve atıştırmalıklar',
+      'Ana Yemekler': 'Közden gelen lezzetler',
+      'Soğuk Mezeler': 'Soğuk mezeler ve lezzetler',
+      'Salatalar': 'Taze ve sağlıklı salatalar',
+      'İçecekler': 'Sıcak, soğuk ve alkollü içecekler',
+      'Meyveler': 'Taze mevsim meyveleri',
+    };
+    return descriptions[categoryName] || 'Lezzetli seçenekler';
   };
 
   if (loading) {
@@ -105,25 +122,33 @@ export default function HomePage() {
           </motion.div>
 
           {/* Search Bar */}
-          <SearchBar items={menuItems} categoryInfo={categoryInfo} />
+          <SearchBar items={menuItems} categoryInfo={Object.fromEntries(
+            categories.map(cat => [cat.slug, cat])
+          )} />
 
           {/* Category Cards Grid */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 md:gap-8">
-            {Object.entries(categoryInfo).map(([key, category]) => {
-              const items = getItemsByCategory(category.title);
-              if (items.length === 0) return null;
-              
-              return (
-                <CategoryCard
-                  key={key}
-                  title={category.title}
-                  description={category.description}
-                  itemCount={items.length}
-                  slug={category.slug}
-                  icon={getIconName(key)}
-                />
-              );
-            })}
+            {categories
+              .filter(cat => {
+                // Kuver ve Fix Menü ürünlerini içeren kategorileri normal kategorilerden ayırma
+                // Çünkü bunlar "Çeşitler" ve "Menüler" kategorilerinde
+                return true; // Tüm kategorileri göster
+              })
+              .map((category) => {
+                const items = getItemsByCategory(category.title);
+                if (items.length === 0) return null;
+                
+                return (
+                  <CategoryCard
+                    key={category.slug}
+                    title={category.title}
+                    description={category.description}
+                    itemCount={items.length}
+                    slug={category.slug}
+                    icon={getIconName(category.slug)}
+                  />
+                );
+              })}
           </div>
         </main>
         
@@ -133,21 +158,35 @@ export default function HomePage() {
   );
 }
 
-// Icon mapping - MuteRestaurant'taki icon isimlerini kullan
-function getIconName(key: string): string {
+// Icon mapping - Dinamik kategori slug'larına göre icon seç
+function getIconName(slug: string): string {
   const iconMap: Record<string, string> = {
-    'baslangiclar': 'soup',
-    'mezeler': 'dish',
-    'ara-sicaklar': 'flame',
-    'salatalar': 'salad',
-    'ana-yemekler': 'meat',
-    'spesyaller': 'star',
+    'cesitler': 'nuts',
+    'menuler': 'star',
+    'menu': 'star',
     'tatlilar': 'cake',
+    'tatli': 'cake',
+    'sicak-mezeler': 'flame',
+    'sicak-meze': 'flame',
+    'ana-yemekler': 'meat',
+    'ana-yemek': 'meat',
+    'soguk-mezeler': 'dish',
+    'soguk-meze': 'dish',
+    'salatalar': 'salad',
+    'salata': 'salad',
     'icecekler': 'coffee',
-    'alkoller': 'wine',
-    'aperatifler': 'nuts',
+    'icecek': 'coffee',
     'meyveler': 'fruits',
+    'meyve': 'fruits',
   };
-  return iconMap[key] || 'dish';
+  
+  // Slug'dan eşleşme bul
+  for (const [key, icon] of Object.entries(iconMap)) {
+    if (slug.includes(key) || key.includes(slug)) {
+      return icon;
+    }
+  }
+  
+  return 'dish';
 }
 
