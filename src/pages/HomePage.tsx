@@ -6,12 +6,6 @@ import SearchBar from '../components/SearchBar';
 import CategoryCard from '../components/CategoryCard';
 import { fetchMenuData, MenuItem, getCategoriesFromMenu, createCategorySlug } from '../lib/googleSheets';
 
-// Özel kategoriler için bilgiler (Kuver ve Fix Menü)
-const specialCategories: Record<string, { title: string; description: string; slug: string }> = {
-  'kuver': { title: 'Kuver', description: 'Kişi başı kuver ücreti', slug: 'kuver' },
-  'fix-menu': { title: 'Fix Menü', description: 'Özel menü seçenekleri', slug: 'fix-menu' },
-};
-
 export default function HomePage() {
   const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -128,13 +122,7 @@ export default function HomePage() {
 
           {/* Category Cards Grid */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 md:gap-8">
-            {categories
-              .filter(cat => {
-                // Kuver ve Fix Menü ürünlerini içeren kategorileri normal kategorilerden ayırma
-                // Çünkü bunlar "Çeşitler" ve "Menüler" kategorilerinde
-                return true; // Tüm kategorileri göster
-              })
-              .map((category) => {
+            {categories.map((category) => {
                 const items = getItemsByCategory(category.title);
                 if (items.length === 0) return null;
                 
